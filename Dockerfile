@@ -1,14 +1,28 @@
-FROM quay.io/prometheus/golang-builder as builder
+FROM golang:1-alpine AS build
 
-ADD .   /go/src/github.com/justwatchcom/sql_exporter
-WORKDIR /go/src/github.com/justwatchcom/sql_exporter
+RUN apk update && apk add make git gcc musl-dev
 
-RUN make
+ARG GITHUB_TOKEN
+ARG SERVICE
 
-FROM        quay.io/prometheus/busybox:glibc
-MAINTAINER  The Prometheus Authors <prometheus-developers@googlegroups.com>
+RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
 
-COPY --from=builder /go/src/github.com/justwatchcom/sql_exporter/sql_exporter  /bin/sql_exporter
+ADD . /tmp/${SERVICE}
 
-EXPOSE      9237
-ENTRYPOINT  [ "/bin/sql_exporter" ]
+WORKDIR /tmp/${SERVICE}
+
+RUN make clean install
+RUN make ${SERVICE}
+
+RUN mv ${SERVICE} /${SERVICE}
+
+FROM alpine:3.11
+
+ARG SERVICE
+
+ENV APP=${SERVICE}
+
+RUN apk add --no-cache ca-certificates tzdata && mkdir /app
+COPY --from=build /${SERVICE} /app/${SERVICE}
+
+ENTRYPOINT /app/${APP}
