@@ -94,4 +94,5 @@ ci-docker-build: docker-auth
 		docker push $(DOCKER_REPOSITORY)
 
 ci-kubernetes-push:
+	@echo "Sending payload $(K8S_PAYLOAD) to api $(K8S_URL)"
 	test "$(shell curl -o /dev/null -w '%{http_code}' -s -X PATCH -k -d '$(K8S_PAYLOAD)' -H 'Content-Type: application/strategic-merge-patch+json' -H 'Authorization: Bearer $(K8S_DEV_TOKEN)' '$(K8S_URL)')" -eq "200"
