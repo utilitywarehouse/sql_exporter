@@ -53,11 +53,11 @@ func main() {
 		"caller", log.DefaultCaller,
 	)
 
-	logger.Log("msg", "Starting sql_exporter", "version_info", version.Info(), "build_context", version.BuildContext())
+	_ = logger.Log("msg", "Starting sql_exporter", "version_info", version.Info(), "build_context", version.BuildContext())
 
 	exporter, err := NewExporter(logger, *configFile)
 	if err != nil {
-		level.Error(logger).Log("msg", "Error starting exporter", "err", err)
+		_ = level.Error(logger).Log("msg", "Error starting exporter", "err", err)
 		os.Exit(1)
 	}
 	prometheus.MustRegister(exporter)
@@ -66,19 +66,21 @@ func main() {
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { http.Error(w, "OK", http.StatusOK) })
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html>
+		if _, err := w.Write([]byte(`<html>
 		<head><title>SQL Exporter</title></head>
 		<body>
 		<h1>SQL Exporter</h1>
 		<p><a href="` + *metricsPath + `">Metrics</a></p>
 		</body>
 		</html>
-		`))
+		`)); err != nil {
+			_ = level.Warn(logger).Log("msg", "write response", "err", err)
+		}
 	})
 
-	level.Info(logger).Log("msg", "Listening", "listenAddress", *listenAddress)
+	_ = level.Info(logger).Log("msg", "Listening", "listenAddress", *listenAddress)
 	if err := http.ListenAndServe(*listenAddress, nil); err != nil {
-		level.Error(logger).Log("msg", "Error starting HTTP server:", "err", err)
+		_ = level.Error(logger).Log("msg", "Error starting HTTP server:", "err", err)
 		os.Exit(1)
 	}
 }

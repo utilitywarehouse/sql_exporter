@@ -35,7 +35,7 @@ func NewExporter(logger log.Logger, configFile string) (*Exporter, error) {
 			continue
 		}
 		if err := job.Init(logger, cfg.Queries); err != nil {
-			level.Warn(logger).Log("msg", "Skipping job. Failed to initialize", "err", err, "job", job.Name)
+			_ = level.Warn(logger).Log("msg", "Skipping job. Failed to initialize", "err", err, "job", job.Name)
 			continue
 		}
 		exp.jobs = append(exp.jobs, job)
@@ -56,7 +56,7 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 				continue
 			}
 			if query.desc == nil {
-				level.Error(e.logger).Log("msg", "Query has no descriptor", "query", query.Name)
+				_ = level.Error(e.logger).Log("msg", "Query has no descriptor", "query", query.Name)
 				continue
 			}
 			ch <- query.desc

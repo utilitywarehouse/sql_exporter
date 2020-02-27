@@ -1,60 +1,97 @@
-# Copyright 2015 The Prometheus Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+base_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
+SERVICE ?= $(base_dir)
 
-GO    := go
-PROMU := $(GOPATH)/bin/promu
-pkgs   = $(shell $(GO) list ./... | grep -v /vendor/)
+BUILDENV := CGO_ENABLED=0
+BUILDENV += GO111MODULE=on
 
-PREFIX              ?= $(shell pwd)
-BIN_DIR             ?= $(shell pwd)
-DOCKER_IMAGE_NAME   ?= sql-exporter
-DOCKER_IMAGE_TAG    ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
+GIT_HASH := $(CIRCLE_SHA1)
+ifeq ($(GIT_HASH),)
+	GIT_HASH := $(shell git rev-parse HEAD)
+endif
+
+LINKFLAGS :=-s -X main.gitHash=$(GIT_HASH) -extldflags "-static"
+TESTFLAGS := -v -cover -timeout 30s
+
+LINT_FLAGS :=--enable golint,unconvert,gofmt
+LINTER_EXE := golangci-lint
+LINTER := $(GOPATH)/bin/$(LINTER_EXE)
+
+DOCKER_ID=payments-circle
+DOCKER_REGISTRY=registry.uw.systems
+DOCKER_REPOSITORY_NAMESPACE=payments
+DOCKER_REPOSITORY_IMAGE=$(SERVICE)
+DOCKER_REPOSITORY=$(DOCKER_REGISTRY)/$(DOCKER_REPOSITORY_NAMESPACE)/$(DOCKER_REPOSITORY_IMAGE)
+DOCKER_IMAGE_TAG=$(GIT_HASH)
+
+K8S_NAMESPACE=KUBERNETES_NAMESPACE
+K8S_DEPLOYMENT_NAME=$(SERVICE)
+K8S_CONTAINER_NAME=$(SERVICE)
+K8S_URL=https://elb.master.k8s.dev.uw.systems/apis/apps/v1/namespaces/$(K8S_NAMESPACE)/deployments/$(K8S_DEPLOYMENT_NAME)
+K8S_PAYLOAD={"spec":{"template":{"spec":{"containers":[{"name":"$(K8S_CONTAINER_NAME)","image":"$(DOCKER_REPOSITORY):$(DOCKER_IMAGE_TAG)"}]}}}}
+
+.DEFAULT_GOAL := rebuild
 
 
-all: format build test
+protos:
+	echo "compile protocol buffers"
 
-style:
-	@echo ">> checking code style"
-	@! gofmt -d $(shell find . -path ./vendor -prune -o -name '*.go' -print) | grep '^'
 
+mockgen-install:
+	go get github.com/golang/mock/gomock
+	go install github.com/golang/mock/mockgen
+
+mockgen:
+	echo "generate mock"
+
+
+.PHONY: install
+install:
+	go get -v ./...
+
+$(LINTER):
+	go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
+
+.PHONY: lint
+lint: $(LINTER)
+	$(LINTER) run $(LINT_FLAGS)
+
+.PHONY: test
 test:
-	@echo ">> running tests"
-	@$(GO) test -short -race $(pkgs)
+	$(BUILDENV) go test $(TESTFLAGS) ./...
 
-format:
-	@echo ">> formatting code"
-	@$(GO) fmt $(pkgs)
+$(SERVICE):
+	$(BUILDENV) go build -o $(SERVICE) -a -ldflags '$(LINKFLAGS)' .
 
-vet:
-	@echo ">> vetting code"
-	@$(GO) vet $(pkgs)
+.PHONY: build
+build: $(SERVICE)
 
-build: promu
-	@echo ">> building binaries"
-	@$(PROMU) build --prefix $(PREFIX)
+.PHONY: clean
+clean:
+	@rm -f $(SERVICE)
 
-tarball: promu
-	@echo ">> building release tarball"
-	@$(PROMU) tarball --prefix $(PREFIX) $(BIN_DIR)
+.PHONY: rebuild
+rebuild: clean $(SERVICE)
 
-docker:
-	@echo ">> building docker image"
-	@docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
-
-promu:
-	@GOOS=$(shell uname -s | tr A-Z a-z) \
-		GOARCH=$(subst x86_64,amd64,$(patsubst i%86,386,$(shell uname -m))) \
-		$(GO) get -u github.com/prometheus/promu
+.PHONY: all
+all: install lint test rebuild
 
 
-.PHONY: all style format build test vet tarball docker promu
+docker-image:
+		docker build -t $(DOCKER_REPOSITORY):local . \
+				--build-arg GITHUB_TOKEN=$(GITHUB_TOKEN) \
+				--build-arg SERVICE=$(SERVICE)
+
+docker-auth:
+		@echo "Logging in to $(DOCKER_REGISTRY) as $(DOCKER_ID)"
+		@docker login -u $(DOCKER_ID) -p $(DOCKER_PASSWORD) $(DOCKER_REGISTRY)
+
+ci-docker-build: docker-auth
+		docker build -t $(DOCKER_REPOSITORY):$(DOCKER_IMAGE_TAG) . \
+				--build-arg GITHUB_TOKEN=$(GITHUB_TOKEN) \
+				--build-arg SERVICE=$(SERVICE)
+		docker tag $(DOCKER_REPOSITORY):$(DOCKER_IMAGE_TAG) $(DOCKER_REPOSITORY):latest
+		docker push $(DOCKER_REPOSITORY)
+
+ci-kubernetes-push:
+	test "$(shell curl -o /dev/null -w '%{http_code}' -s -X PATCH -k -d '$(K8S_PAYLOAD)' -H 'Content-Type: application/strategic-merge-patch+json' -H 'Authorization: Bearer $(K8S_DEV_TOKEN)' '$(K8S_URL)')" -eq "200"

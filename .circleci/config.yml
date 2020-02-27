@@ -1,0 +1,40 @@
+version: 2
+jobs:
+  build:
+    working_directory: ~/SERVICE_NAME
+    docker:
+    - image: circleci/golang:1
+    steps:
+      - checkout
+      - run: git config --global url."https://$GITHUB_TOKEN:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+      - run: make all
+
+  deploy:
+    working_directory: ~/SERVICE_NAME
+    docker:
+    - image: circleci/golang:1
+    steps:
+      - checkout
+      - run: git config --global url."https://$GITHUB_TOKEN:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+      - run: make all
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: make ci-docker-build
+      - run: make ci-kubernetes-push
+
+workflows:
+  version: 2
+  development:
+    jobs:
+      - build:
+          context: payments
+          filters:
+            branches:
+              ignore: master
+  deployment:
+    jobs:
+      - deploy:
+          context: payments
+          filters:
+            branches:
+              only: master

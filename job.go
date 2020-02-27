@@ -31,7 +31,7 @@ func (j *Job) Init(logger log.Logger, queries map[string]string) error {
 	// register each query as an metric
 	for _, q := range j.Queries {
 		if q == nil {
-			level.Warn(j.log).Log("msg", "Skipping invalid query")
+			_ = level.Warn(j.log).Log("msg", "Skipping invalid query")
 			continue
 		}
 		q.log = log.With(j.log, "query", q.Name)
@@ -42,7 +42,7 @@ func (j *Job) Init(logger log.Logger, queries map[string]string) error {
 			}
 		}
 		if q.Query == "" {
-			level.Warn(q.log).Log("msg", "Skipping empty query")
+			_ = level.Warn(q.log).Log("msg", "Skipping empty query")
 			continue
 		}
 		if q.metrics == nil {
@@ -77,7 +77,7 @@ func (j *Job) Run() {
 	}
 	// if there are no connection URLs for this job it can't be run
 	if j.Connections == nil {
-		level.Error(j.log).Log("msg", "No connections for job", "job", j.Name)
+		_ = level.Error(j.log).Log("msg", "No connections for job", "job", j.Name)
 		return
 	}
 	// make space for the connection objects
@@ -91,7 +91,7 @@ func (j *Job) Run() {
 			if strings.HasPrefix(conn, "mysql://") {
 				config, err := mysql.ParseDSN(strings.TrimPrefix(conn, "mysql://"))
 				if err != nil {
-					level.Error(j.log).Log("msg", "Failed to parse MySQL DSN", "url", conn, "err", err)
+					_ = level.Error(j.log).Log("msg", "Failed to parse MySQL DSN", "url", conn, "err", err)
 				}
 
 				j.conns = append(j.conns, &connection{
@@ -106,7 +106,7 @@ func (j *Job) Run() {
 			}
 			u, err := url.Parse(conn)
 			if err != nil {
-				level.Error(j.log).Log("msg", "Failed to parse URL", "url", conn, "err", err)
+				_ = level.Error(j.log).Log("msg", "Failed to parse URL", "url", conn, "err", err)
 				continue
 			}
 			user := ""
@@ -129,14 +129,14 @@ func (j *Job) Run() {
 				// "InvalidParameter: 1 validation error(s) found. - minimum field size of 1, StartQueryExecutionInput.QueryExecutionContext.Database."
 				newConn.conn, err = sqlx.Open("athena", u.RawQuery)
 				if err != nil {
-					level.Error(j.log).Log("msg", "Failed to open Athena connection", "connection", conn, "err", err)
+					_ = level.Error(j.log).Log("msg", "Failed to open Athena connection", "connection", conn, "err", err)
 					continue
 				}
 			}
 			j.conns = append(j.conns, newConn)
 		}
 	}
-	level.Debug(j.log).Log("msg", "Starting")
+	_ = level.Debug(j.log).Log("msg", "Starting")
 
 	// enter the run loop
 	// tries to run each query on each connection at approx the interval
@@ -144,9 +144,9 @@ func (j *Job) Run() {
 		bo := backoff.NewExponentialBackOff()
 		bo.MaxElapsedTime = j.Interval
 		if err := backoff.Retry(j.runOnce, bo); err != nil {
-			level.Error(j.log).Log("msg", "Failed to run", "err", err)
+			_ = level.Error(j.log).Log("msg", "Failed to run", "err", err)
 		}
-		level.Debug(j.log).Log("msg", "Sleeping until next run", "sleep", j.Interval.String())
+		_ = level.Debug(j.log).Log("msg", "Sleeping until next run", "sleep", j.Interval.String())
 		time.Sleep(j.Interval)
 	}
 }
@@ -159,7 +159,7 @@ func (j *Job) runOnceConnection(conn *connection, done chan int) {
 
 	// connect to DB if not connected already
 	if err := conn.connect(j); err != nil {
-		level.Warn(j.log).Log("msg", "Failed to connect", "err", err)
+		_ = level.Warn(j.log).Log("msg", "Failed to connect", "err", err)
 		j.markFailed(conn)
 		return
 	}
@@ -170,16 +170,16 @@ func (j *Job) runOnceConnection(conn *connection, done chan int) {
 		}
 		if q.desc == nil {
 			// this may happen if the metric registration failed
-			level.Warn(q.log).Log("msg", "Skipping query. Collector is nil")
+			_ = level.Warn(q.log).Log("msg", "Skipping query. Collector is nil")
 			continue
 		}
-		level.Debug(q.log).Log("msg", "Running Query")
+		_ = level.Debug(q.log).Log("msg", "Running Query")
 		// execute the query on the connection
 		if err := q.Run(conn); err != nil {
-			level.Warn(q.log).Log("msg", "Failed to run query", "err", err)
+			_ = level.Warn(q.log).Log("msg", "Failed to run query", "err", err)
 			continue
 		}
-		level.Debug(q.log).Log("msg", "Query finished")
+		_ = level.Debug(q.log).Log("msg", "Query finished")
 		updated++
 	}
 }
@@ -233,7 +233,7 @@ func (c *connection) connect(job *Job) error {
 
 	// execute StartupSQL
 	for _, query := range job.StartupSQL {
-		level.Debug(job.log).Log("msg", "StartupSQL", "Query:", query)
+		_ = level.Debug(job.log).Log("msg", "StartupSQL", "Query:", query)
 		conn.MustExec(query)
 	}
 
