@@ -13,7 +13,7 @@ endif
 LINKFLAGS :=-s -X main.gitHash=$(GIT_HASH) -extldflags "-static"
 TESTFLAGS := -v -cover -timeout 30s
 
-LINT_FLAGS :=--enable golint,unconvert,unparam,gofmt
+LINT_FLAGS :=--enable golint,unconvert,gofmt
 LINTER_EXE := golangci-lint
 LINTER := $(GOPATH)/bin/$(LINTER_EXE)
 

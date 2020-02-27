@@ -37,13 +37,13 @@ func (q *Query) Run(conn *connection) error {
 		res := make(map[string]interface{})
 		err := rows.MapScan(res)
 		if err != nil {
-			level.Error(q.log).Log("msg", "Failed to scan", "err", err, "host", conn.host, "db", conn.database)
+			_ = level.Error(q.log).Log("msg", "Failed to scan", "err", err, "host", conn.host, "db", conn.database)
 			failedScrapes.WithLabelValues(conn.driver, conn.host, conn.database, conn.user, q.jobName, q.Name).Set(1.0)
 			continue
 		}
 		m, err := q.updateMetrics(conn, res)
 		if err != nil {
-			level.Error(q.log).Log("msg", "Failed to update metrics", "err", err, "host", conn.host, "db", conn.database)
+			_ = level.Error(q.log).Log("msg", "Failed to update metrics", "err", err, "host", conn.host, "db", conn.database)
 			failedScrapes.WithLabelValues(conn.driver, conn.host, conn.database, conn.user, q.jobName, q.Name).Set(1.0)
 			continue
 		}
@@ -71,7 +71,7 @@ func (q *Query) updateMetrics(conn *connection, res map[string]interface{}) ([]p
 	for _, valueName := range q.Values {
 		m, err := q.updateMetric(conn, res, valueName)
 		if err != nil {
-			level.Error(q.log).Log(
+			_ = level.Error(q.log).Log(
 				"msg", "Failed to update metric",
 				"value", valueName,
 				"err", err,
@@ -109,11 +109,11 @@ func (q *Query) updateMetric(conn *connection, res map[string]interface{}, value
 		case float32:
 			value = float64(f)
 		case float64:
-			value = float64(f)
+			value = f
 		case []uint8:
 			val, err := strconv.ParseFloat(string(f), 64)
 			if err != nil {
-				return nil, fmt.Errorf("Column '%s' must be type float, is '%T' (val: %s)", valueName, i, f)
+				return nil, fmt.Errorf("Column '%s' must be type float, is '%T' (val: %s)", valueName, i, string(f))
 			}
 			value = val
 		case string:
