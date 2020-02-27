@@ -1,7 +1,7 @@
 version: 2
 jobs:
   build:
-    working_directory: ~/SERVICE_NAME
+    working_directory: ~/sql_exporter
     docker:
     - image: circleci/golang:1
     steps:
@@ -10,7 +10,7 @@ jobs:
       - run: make all
 
   deploy:
-    working_directory: ~/SERVICE_NAME
+    working_directory: ~/sql_exporter
     docker:
     - image: circleci/golang:1
     steps:
