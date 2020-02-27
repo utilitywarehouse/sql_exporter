@@ -25,8 +25,8 @@ DOCKER_REPOSITORY=$(DOCKER_REGISTRY)/$(DOCKER_REPOSITORY_NAMESPACE)/$(DOCKER_REP
 DOCKER_IMAGE_TAG=$(GIT_HASH)
 
 K8S_NAMESPACE=KUBERNETES_NAMESPACE
-K8S_DEPLOYMENT_NAME=$(SERVICE)
-K8S_CONTAINER_NAME=$(SERVICE)
+K8S_DEPLOYMENT_NAME=payment-api-db-prom-sql-exporter
+K8S_CONTAINER_NAME=prom-sql-exporter
 K8S_URL=https://elb.master.k8s.dev.uw.systems/apis/apps/v1/namespaces/$(K8S_NAMESPACE)/deployments/$(K8S_DEPLOYMENT_NAME)
 K8S_PAYLOAD={"spec":{"template":{"spec":{"containers":[{"name":"$(K8S_CONTAINER_NAME)","image":"$(DOCKER_REPOSITORY):$(DOCKER_IMAGE_TAG)"}]}}}}
 
